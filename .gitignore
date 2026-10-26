@@ -1,0 +1,24 @@
+# 上游源码只读参考，不纳入版本管理
+research/
+
+# Xcode
+DerivedData/
+build/
+dist/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# SwiftPM
+.build/
+.swiftpm/
+
+# 系统
+.DS_Store
+
+# Agent 工作区状态
+.workbuddy/
+
+# 环境文件（敏感信息）
+local.build.env
+.env
