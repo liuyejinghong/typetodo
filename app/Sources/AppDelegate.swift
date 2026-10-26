@@ -1368,9 +1368,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
         TypetodoConfig.shared.bool(forKey: "streaming_asr_enabled", defaultValue: true)
     }
     private var lastDeliveredText: String?
-    /// 最近一次录音时前台的软件名（给反馈页当线索）
-    private var lastRecordingTargetApp: String?
-    private var supportPollTimer: Timer?
     private var pendingPolishWarning: String?  // 润色失败原因（额度用尽等），在文字投递后提醒一次
     private var pendingOverlayHide: DispatchWorkItem?  // 防止上一次错误的延时隐藏误杀新录音浮窗
     /// 松手那一刻的前台 App：识别/润色期间用户切走了，就不往新的前台 App 里粘贴
@@ -1605,7 +1602,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
 
         // 启动末尾主动调一次，注册 hotkey 并把状态栏置为 ready
         updateAppReadiness()
-        startSupportPolling()
 
         // 没配 key 且未激活 → 自动进入/刷新免费试用（需 cloudTranscriber 已初始化）。
         maybeStartTrial()
@@ -1654,10 +1650,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
     private func startRecording(feedback: Bool = true) -> Bool {
         guard !isRecording else { return false }
         guard canStartRecording(showFeedback: feedback) else { return false }
-        // 反馈页用：记下这次是在哪个软件里录的（定位「某个软件里不好用」）
-        if let name = NSWorkspace.shared.frontmostApplication?.localizedName, name != "Typetodo" {
-            lastRecordingTargetApp = name
-        }
         if isAutoTermCorrectionLearningEnabled {
             HotWordsAutoLearner.shared.finalizePendingLearning(reason: "next_recording")
             HotWordsAutoLearner.shared.stopMonitoring()
@@ -2573,34 +2565,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
     func openMicrophoneSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
             NSWorkspace.shared.open(url)
-        }
-    }
-
-    // MARK: - 反馈对话（SettingsWindowDelegate）
-
-    func recentTargetAppName() -> String? { lastRecordingTargetApp }
-
-    /// 最近 120 行调试日志（不含用户说的内容：日志里只有字数、耗时、软件名这类元信息）
-    func debugLogTail() -> String {
-        let logFile = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Typetodo.log")
-        guard let data = try? Data(contentsOf: logFile), let text = String(data: data, encoding: .utf8) else { return "" }
-        let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
-        let tail = lines.suffix(120).joined(separator: "\n")
-        return String(tail.suffix(SupportChatService.maxLogChars))
-    }
-
-    /// 开始过对话的设备每 5 分钟拉一次新回复；没开始过的一次网络请求都不发
-    private func startSupportPolling() {
-        supportPollTimer?.invalidate()
-        let timer = Timer(timeInterval: SupportChatService.pollInterval, repeats: true) { _ in
-            guard SupportChatService.shared.hasThread else { return }
-            SupportChatService.shared.sync()
-        }
-        timer.tolerance = 30
-        RunLoop.main.add(timer, forMode: .common)
-        supportPollTimer = timer
-        if SupportChatService.shared.hasThread {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 8) { SupportChatService.shared.sync() }
         }
     }
 
