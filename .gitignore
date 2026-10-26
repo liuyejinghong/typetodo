@@ -1,3 +1,6 @@
+# 本地 vendored 依赖（用 app/scripts/fetch-sparkle.sh 拉取）
+app/vendor/
+
 # 上游源码只读参考，不纳入版本管理
 research/
 
