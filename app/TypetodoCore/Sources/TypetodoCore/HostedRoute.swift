@@ -29,7 +29,7 @@ public enum HostedRoute: Equatable {
     /// 按当前全局状态判定。
     public static func current(ownKeyConfigured: Bool) -> HostedRoute {
         decide(ownKeyConfigured: ownKeyConfigured,
-               hostedAvailable: TrialManager.shared.isTrialAvailable,
+               hostedAvailable: HostedAvailability.isEnabled,
                isActivated: LicenseManager.shared.isActivated,
                hasActiveMembership: LicenseManager.shared.hasActiveMembership(),
                isInTrial: TrialManager.shared.isInTrial,

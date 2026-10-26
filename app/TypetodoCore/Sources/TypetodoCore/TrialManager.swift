@@ -11,19 +11,11 @@ import CryptoKit
 public final class TrialManager {
     public static let shared = TrialManager()
 
-    /// 试用服务器地址与证书指纹不写在源码里：由 build.sh 在构建时从不进仓库的 `local.build.env`
-    /// 注入 Info.plist（VPTrialAPIBase / VPTrialCertSHA256）。开源仓库里没有这两个值，
-    /// 自己编译出来的版本就没有试用通道、只能自带 Key；官网下载的签名版照常有 7 天试用。
-    /// （2026-09-14 Ray 拍板：试用地址不进公开仓库）
-    static var configuredAPIBase: String? { infoPlistValue("VPTrialAPIBase") }
-    static var configuredCertSHA256: String? { infoPlistValue("VPTrialCertSHA256") }
-
-    private static func infoPlistValue(_ key: String) -> String? {
-        guard let raw = Bundle.main.object(forInfoDictionaryKey: key) as? String else { return nil }
-        let v = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        // 没注入时 Xcode 会把 $(VAR) 展开成空串；万一原样留下也当作没有
-        return (v.isEmpty || v.hasPrefix("$(")) ? nil : v
-    }
+    /// 试用通道的地址统一由 `HostedAvailability` 决定：一期没有配置 → 关闭，
+    /// `isTrialAvailable` 恒为 false、`refreshFromServer` 直接返回，不发任何网络请求。
+    /// 二期由 `build.sh` 从不入库的 `local.build.env` 注入 Info.plist 即可接回。
+    static var configuredAPIBase: String? { HostedAvailability.apiBase }
+    static var configuredCertSHA256: String? { HostedAvailability.certSHA256 }
 
     private let defaults: UserDefaults
     private let session: URLSession

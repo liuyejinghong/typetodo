@@ -6,7 +6,7 @@ import IOKit
 import UIKit
 #endif
 
-/// 授权管理：对接自家 Cloudflare Worker（api.typefree.app）。
+/// 授权管理：对接二期的激活服务端（地址由 `HostedAvailability` 注入，一期没有）。
 ///
 /// - `activate`：把「激活码 + 设备指纹」发给服务器，服务器在账本里核销名额后
 ///   用 Ed25519 私钥对 "<code>:<device_id>" 签名返回 token。
@@ -28,11 +28,10 @@ public final class LicenseManager {
     // 2026-06-10 已验证配对。换钥前必须想清楚：换了 = 所有已发 token 全部失效。
     public static let embeddedPublicKeyBase64 = "abCefT2wij5lUaJlIBi0y+qhv/OkJ7QfwQK/2OsePXs="
 
-    static let defaultAPIBase = "https://api.typefree.app"
-
     private let defaults: UserDefaults
     private let session: URLSession
-    private let apiBase: String
+    /// nil = 本次构建没有激活/会员通道（一期：纯本地自带 Key）。
+    private let apiBase: String?
 
     private let kKey = "license.key"
     private let kToken = "license.token"
@@ -55,12 +54,18 @@ public final class LicenseManager {
     private var revalidating = false
     private var lastForcedAttempt: TimeInterval = 0
 
-    /// apiBase 可经 UserDefaults `license.apiBase` 覆盖（本地联调用），缺省走生产。
+    /// apiBase 来源：显式入参 > UserDefaults `license.apiBase`（本地联调）> `HostedAvailability`。
+    /// 三者都没有时通道关闭，任何网络调用直接早退。
     public init(defaults: UserDefaults = .standard, session: URLSession = .shared, apiBase: String? = nil) {
         self.defaults = defaults
         self.session = session
-        self.apiBase = apiBase ?? defaults.string(forKey: "license.apiBase") ?? Self.defaultAPIBase
+        self.apiBase = apiBase
+            ?? defaults.string(forKey: "license.apiBase")
+            ?? HostedAvailability.apiBase
     }
+
+    /// 本次构建是否有激活/会员通道。
+    public var isHostedAvailable: Bool { apiBase != nil }
 
     // MARK: - 纯函数（与 Worker 端必须一致，有跨语言向量测试互证）
 
@@ -80,6 +85,8 @@ public final class LicenseManager {
 
     /// 已激活 = 本地存有 code+token 且对「code:本机指纹」验签通过。拷配置到别的机器无效。
     public var isActivated: Bool {
+        // 没有托管通道就没有「激活」这回事：一期只能自带 Key。
+        guard isHostedAvailable else { return false }
         guard let code = defaults.string(forKey: kKey), !code.isEmpty,
               let token = defaults.string(forKey: kToken), !token.isEmpty else { return false }
         return Self.verify(message: Self.licenseMessage(code: code, deviceID: deviceID()),
@@ -278,7 +285,7 @@ public final class LicenseManager {
                                   tokenBase64: token,
                                   publicKeyBase64: Self.embeddedPublicKeyBase64) else {
                     DispatchQueue.main.async {
-                        completion(.failure(.network("激活校验失败，请联系 ray@typefree.app")))
+                        completion(.failure(.network("激活校验失败，请稍后重试")))
                     }
                     return
                 }
@@ -414,8 +421,9 @@ public final class LicenseManager {
     private func post(path: String,
                       body: [String: String],
                       completion: @escaping (Result<[String: Any], ActivationError>) -> Void) {
-        guard let url = URL(string: apiBase + path) else {
-            completion(.failure(.network("地址错误")))
+        guard let base = apiBase, let url = URL(string: base + path) else {
+            // 一期没有托管通道：不发请求，按网络不可用上报，调用方本来就只走自带 Key。
+            completion(.failure(.network("当前版本没有开通激活/会员通道")))
             return
         }
         var req = URLRequest(url: url)

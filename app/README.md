@@ -53,7 +53,7 @@ swift test --disable-sandbox -Xswiftc -Xfrontend -Xswiftc -disable-sandbox
 `-disable-sandbox` 是必需的：Swift 宏插件（`swift-plugin-server`）自带一层沙箱，在受限环境里会启动失败并报
 `external macro implementation type ... produced malformed response`。
 
-基线：**282 用例 / 0 失败**。
+基线：**293 用例 / 0 失败**。
 
 ### 结构不变量检查
 

@@ -33,6 +33,13 @@
 	<string>© 2026 liuyejinghong. GPL-3.0.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<!-- 二期托管通道（试用/会员）。一期留空：未注入时这里保留 $(...) 字面量，
+	     HostedAvailability 会当成「没有通道」，产品只走自带 Key。
+	     真正要接服务端时，在 local.build.env 里填 TYPETODO_HOSTED_API_BASE 即可。 -->
+	<key>TypetodoHostedAPIBase</key>
+	<string>$(TYPETODO_HOSTED_API_BASE)</string>
+	<key>TypetodoHostedCertSHA256</key>
+	<string>$(TYPETODO_HOSTED_CERT_SHA256)</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Typetodo 需要麦克风权限来录制语音并转写为文字。</string>
 </dict>

@@ -18,8 +18,8 @@ if [ -f "$SCRIPT_DIR/local.build.env" ]; then
     # shellcheck disable=SC1091
     . "$SCRIPT_DIR/local.build.env"
 fi
-VP_TRIAL_API_BASE="${VP_TRIAL_API_BASE:-}"
-VP_TRIAL_CERT_SHA256="${VP_TRIAL_CERT_SHA256:-}"
+TYPETODO_HOSTED_API_BASE="${TYPETODO_HOSTED_API_BASE:-}"
+TYPETODO_HOSTED_CERT_SHA256="${TYPETODO_HOSTED_CERT_SHA256:-}"
 SIGNING_NOTE="Note: local builds are ad hoc signed; distribution still needs Developer ID signing and notarization."
 
 print_summary() {
@@ -111,8 +111,8 @@ build_with_xcode() {
         -derivedDataPath "$DERIVED_DATA_PATH" \
         ARCHS=arm64 \
         ONLY_ACTIVE_ARCH=YES \
-        VP_TRIAL_API_BASE="$VP_TRIAL_API_BASE" \
-        VP_TRIAL_CERT_SHA256="$VP_TRIAL_CERT_SHA256" \
+        TYPETODO_HOSTED_API_BASE="$TYPETODO_HOSTED_API_BASE" \
+        TYPETODO_HOSTED_CERT_SHA256="$TYPETODO_HOSTED_CERT_SHA256" \
         build
     local xcode_exit=$?
     if [ $xcode_exit -ne 0 ]; then

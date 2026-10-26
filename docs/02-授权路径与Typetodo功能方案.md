@@ -243,6 +243,30 @@ protocol TextRefining      { func refine(_ t: String, _ s: RefineStyle) async th
 protocol TodoExtracting    { func extract(_ t: String, _ c: ExtractionContext) async throws -> [TodoDraft] }
 ```
 
+#### 5.3.1 实施修订（P0 落地后回填）
+
+原计划是「协议 + 空实现」。读完上游实现后改为**保留实现、集中关闭**，理由：
+
+上游那套试用/会员代码已经把二期的契约写全了——`HostedRoute.decide` 是可单测的纯函数路由、
+`MembershipInfo` 是现成 DTO、`ActivationError` 与 `trial_expired` / `insufficient_quota`
+是现成错误码、证书固定与额度对账也在。删掉再抽一套协议+空实现，等于把已验证的实现换成没人验证的骨架。
+
+所以实际做法是新增 `HostedAvailability` 作为**唯一总开关**：
+
+```swift
+HostedAvailability.apiBase   // nil = 一期，没有托管通道
+HostedAvailability.isEnabled // false
+```
+
+- `TrialManager.configuredAPIBase` / `LicenseManager.apiBase` 都从它取值
+- `HostedRoute.current` 用它判 `hostedAvailable`，一期恒为 `.none`，即自带 Key 直连
+- 构建期由 `local.build.env` 的 `TYPETODO_HOSTED_API_BASE` 注入 Info.plist；没注入时
+  Xcode 留下 `$(...)` 字面量，`resolve()` 视为未配置
+- 二期接回服务端 = 给这一个变量赋值，调用方一行不改
+
+护栏测试 `HostedAvailabilityTests` 锁死了「没有通道时必须 `.none`」，并复查了有通道时
+会员优先 / 自带 Key 优先 / 试用兜底三种路由仍然正确。
+
 **路由策略**（照搬上游 `HostedRoute` 的思路，一期只会命中 `.ownKey`）：
 
 ```swift

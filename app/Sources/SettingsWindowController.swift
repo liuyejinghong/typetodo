@@ -3389,7 +3389,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         switch err {
         case .emptyKey:      return "请先粘贴授权码"
         case .invalidKey:    return "授权码无效，请检查是否复制完整"
-        case .limitReached:  return "这个授权码已在另一台 Mac 上激活。换新机请到 typefree.app/recover 重置后再试。"
+        case .limitReached:  return "这个授权码已在另一台 Mac 上激活。"
         case .network(let m): return "激活失败：\(m)"
         }
     }
