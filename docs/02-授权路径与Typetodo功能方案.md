@@ -262,7 +262,11 @@ HostedAvailability.isEnabled // false
 - `HostedRoute.current` 用它判 `hostedAvailable`，一期恒为 `.none`，即自带 Key 直连
 - 构建期由 `local.build.env` 的 `TYPETODO_HOSTED_API_BASE` 注入 Info.plist；没注入时
   Xcode 留下 `$(...)` 字面量，`resolve()` 视为未配置
-- 二期接回服务端 = 给这一个变量赋值，调用方一行不改
+- 二期接回服务端 = 给这一个变量赋值，再补两处启动调用（一期已删）：
+  `AppDelegate` 里的 `LicenseManager.shared.startRevalidation(...)` 与
+  `maybeStartTrial()`（后者含「没配 Key 就拉一次试用」的逻辑）。
+  这两处删掉是因为没有通道时它们只会空转：前者会挂一个永不生效的 6 小时定时器，
+  后者必然提前返回。二期要恢复的是「让服务器知道这台设备」的入口，不是路由本身。
 
 护栏测试 `HostedAvailabilityTests` 锁死了「没有通道时必须 `.none`」，并复查了有通道时
 会员优先 / 自带 Key 优先 / 试用兜底三种路由仍然正确。

@@ -1267,14 +1267,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
     private lazy var updateUserDriver = TypetodoUpdateUserDriver(owner: self)
     lazy var updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: updateUserDriver, delegate: self)
 
-    /// 官方签名版在构建时注入了试用服务器地址（见 build.sh / TrialManager.configuredAPIBase）；
-    /// 开源仓库自己编出来的没有，据此区分。
-    static var isOfficialBuild: Bool {
-        guard let raw = Bundle.main.object(forInfoDictionaryKey: "VPTrialAPIBase") as? String else { return false }
-        let v = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !v.isEmpty && !v.hasPrefix("$(")
-    }
-
     /// 菜单栏「检查更新…」转发到 Sparkle。
     @objc func checkForUpdates(_ sender: Any?) {
         updateUserDriver.beginUserInitiatedCheck()
@@ -1361,7 +1353,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
     private var didReportMissingAccessibility = false
     private var didPromptForAccessibility = false
     private var axPollTimer: Timer?  // 辅助功能未授权时轮询，授权后立即接管快捷键（无需重启）
-    private var trialMaxRecordingTimer: Timer?  // 试用录音封顶 5 分钟，到点自动停止转写已录内容
     private var streamingSession: StreamingTranscriptionSession?  // 边录边发：录音中提交已说完的段落
     private var streamingTimer: Timer?  // 录音中定时取样并 ingest
     private var streamingEnabled: Bool {  // 隐藏开关，出问题可不发版关闭
@@ -1480,22 +1471,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
         // （之前只能靠右键菜单粘贴）。
         setupMainMenu()
 
-        // 握手时告诉服务器「这台填了自己的 Key」，运营后台才分得清自带 Key 与试用用户（只是个布尔值）
-        TrialManager.ownKeyConfiguredProvider = { [weak self] in self?.cloudTranscriber.isConfigured() ?? false }
-
         do {
             try updater.start()
-            if !Self.isOfficialBuild {
-                // 自己从源码编译的版本：更新源是官方 appcast，自动下载会把本地改动悄悄换成官方版。
-                // 关掉自动检查/下载；菜单里的「检查更新…」仍可手动用。
-                updater.automaticallyChecksForUpdates = false
-                updater.automaticallyDownloadsUpdates = false
-                debugLog("Sparkle: source build, automatic updates disabled")
-            } else if updater.automaticallyChecksForUpdates,
-               updater.allowsAutomaticUpdates,
-               !updater.automaticallyDownloadsUpdates {
-                updater.automaticallyDownloadsUpdates = true
-            }
+            // 一期不启用自动更新：更新源尚未建立，自动下载没有意义。
+            // 菜单里的「检查更新…」仍保留，二期接上 feed 后再放开。
+            updater.automaticallyChecksForUpdates = false
+            updater.automaticallyDownloadsUpdates = false
+            debugLog("Sparkle: automatic updates disabled (phase 1)")
             // Info.plist 中仍保持每天检查一次；这里不额外强制每次启动弹检查。
             debugLog("Sparkle updater started")
         } catch {
@@ -1506,9 +1488,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
         // 配合开机自启，每次登录都被弹到「系统设置」体验极差，且用户无法关掉。
         // 已拒绝的用户在引导页 / 首页健康卡里点击时再跳（onboardingRequestMicrophone / openMicrophoneSettings）。
         requestMicrophonePermissionIfUndetermined()
-
-        // 授权联网复核：退款/被找回页重置的设备，几天内自动退出激活（没网照常用）
-        LicenseManager.shared.startRevalidation(appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
 
         // 自动学习调度（从成稿挖词、风格画像，两者现在都默认停用，见 AutoLearnScheduler.run）：启动后在后台低优先级跑一次，之后随投递节流触发
         AutoLearnScheduler.shared.debugLog = { [weak self] msg in self?.debugLog(msg) }
@@ -1603,14 +1582,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
         // 启动末尾主动调一次，注册 hotkey 并把状态栏置为 ready
         updateAppReadiness()
 
-        // 没配 key 且未激活 → 自动进入/刷新免费试用（需 cloudTranscriber 已初始化）。
-        maybeStartTrial()
-    }
-
-    /// 没配 key 且未激活 → 自动进入/刷新免费试用（owner 出 API 费）。断网静默，不阻塞启动。
-    private func maybeStartTrial() {
-        guard !cloudTranscriber.isConfigured(), !LicenseManager.shared.isActivated else { return }
-        TrialManager.shared.refreshFromServer()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -1687,18 +1658,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
         // 结束和取消都响结束音。长按问 AI 在判出开口前可能是误触，两个都不出声。
         didPlayStartCue = !askAwaitingSpeech && CuePlayer.shared.isEnabled
         if didPlayStartCue { CuePlayer.shared.play(.start); debugLog("Cue: start（\(CuePlayer.shared.style.rawValue)）") }
-        // 托管通道录音封顶（owner 出识别费，防开着不动烧钱）：试用 5 分钟；会员 9 分 50 秒——服务器单条上限 10 分钟，
-        // 编码会多出零点几秒，留点余量免得整段被拒。到点正常停下并转写已录内容。
-        let hostedRoute = HostedRoute.current(ownKeyConfigured: cloudTranscriber.isConfigured())
-        if hostedRoute != .none {
-            let cap: TimeInterval = hostedRoute == .member ? 590 : 300
-            trialMaxRecordingTimer?.invalidate()
-            trialMaxRecordingTimer = Timer.scheduledTimer(withTimeInterval: cap, repeats: false) { [weak self] _ in
-                guard let self = self, self.isRecording else { return }
-                self.debugLog("Hosted recording reached \(Int(cap))s cap — auto-stopping")
-                self.stopRecordingAndProcess()
-            }
-        }
         setupStreamingIfEligible()
         return true
     }
@@ -1746,8 +1705,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
             stopRecordingAndAsk()
             return
         }
-        trialMaxRecordingTimer?.invalidate()
-        trialMaxRecordingTimer = nil
         isRecording = false
         hotkeyManager?.recordingDidLeaveActiveState()
         mouseHoldToTalkManager?.recordingDidLeaveActiveState()
@@ -1921,8 +1878,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
         let followUp = voiceQuestionFollowUp
         voiceQuestionFollowUp = false
         answerPanel.setRecording(false)
-        trialMaxRecordingTimer?.invalidate()
-        trialMaxRecordingTimer = nil
         streamingTimer?.invalidate()
         streamingTimer = nil
         streamingSession = nil
@@ -2074,8 +2029,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
         askAwaitingSpeech = false
         voiceQuestionMode = false
         voiceQuestionFollowUp = false
-        trialMaxRecordingTimer?.invalidate()
-        trialMaxRecordingTimer = nil
         streamingTimer?.invalidate()
         streamingTimer = nil
         streamingSession = nil
@@ -2116,8 +2069,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
             }
         }
 
-        trialMaxRecordingTimer?.invalidate()
-        trialMaxRecordingTimer = nil
         streamingTimer?.invalidate()
         streamingTimer = nil
         streamingSession = nil
@@ -2316,68 +2267,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
             // 自带 Key 用户（选的服务没 Key / 钥匙串读不到）：说清楚原因，别提示「试用已结束」误导（工单 #1030）
             let ownKeyHint = cloudTranscriber.ownKeyIssue().map(CloudASRTranscriber.hint(for:))
             if let ownKeyHint { debugLog("Cloud ASR own key issue: \(ownKeyHint)") }
-            if !LicenseManager.shared.isActivated {
-                if TrialManager.shared.isInTrial {
-                    // 7 天总额用完 = 试用结束（服务器会 429），别再上传音频白跑一趟
-                    if TrialManager.shared.isTotalExhausted {
-                        TrialManager.shared.refreshFromServer()   // 服务器可能调高/重置过额度，对一次账，下次按就能用
-                        if showFeedback {
-                            overlayWindow.showHint("试用额度已用完（7 天共 \(TrialManager.formatChars(TrialManager.shared.totalLimit)) 字）· 开通会员，或填自己的 Key 不限量")
-                        }
-                        return false
-                    }
-                    // 试用中：当日额度（缓存值，服务器才是权威）没满就放行；放行后不再走下面的免费额度检查。
-                    if TrialManager.shared.usedToday >= TrialManager.shared.dailyLimit {
-                        TrialManager.shared.refreshFromServer()   // 缓存可能旧了，顺手对一次账
-                        if showFeedback {
-                            overlayWindow.showHint("今日试用额度已用完（剩 \(TrialManager.shared.daysLeft) 天）· 开通会员或填自己的 Key 不限量")
-                        }
-                        return false
-                    }
-                    return true
-                }
-                if TrialManager.shared.trialExpired {
-                    if showFeedback {
-                        overlayWindow.showHint(ownKeyHint ?? "试用已结束 · 开通会员，或在「设置 → 模型」填自己的 Key")
-                    }
-                    return false
-                }
-                if !TrialManager.shared.isTrialAvailable {
-                    // 自己编译的开源版没有试用通道（试用地址不进公开仓库）：直接引导填 Key。
-                    if showFeedback {
-                        overlayWindow.showHint(ownKeyHint ?? "请先在「设置 → 模型」里填入 API Key")
-                    }
-                    return false
-                }
-                // 试用还没拉到（首启刷新中 / 断网）→ 触发一次刷新并提示稍候。
-                TrialManager.shared.refreshFromServer()
-                if showFeedback {
-                    overlayWindow.showHint("正在准备免费试用，请稍候…")
-                }
-                return false
-            }
-            // 已激活：年付会员走托管通道；老买断/赠送码需要自己的 Key
-            let license = LicenseManager.shared
-            if license.isMember && TrialManager.shared.isTrialAvailable {
-                if license.isMemberExpired() {
-                    if showFeedback {
-                        overlayWindow.showHint("会员已到期 · 续费，或在「设置 → 模型」填自己的 Key")
-                    }
-                    return false
-                }
-                if license.hasActiveMembership() { return true }
-                // 会员有效但手里还没有可用令牌（刚转成会员 / 很久没联网）→ 立刻复核一次；联不上就说清楚是网络
-                license.revalidateNow { [weak self] ok in
-                    guard let self, !ok, showFeedback else { return }
-                    self.overlayWindow.showHint("无法连接激活服务，请检查网络后再试")
-                }
-                if showFeedback {
-                    overlayWindow.showHint("正在验证会员状态，请稍候…")
-                }
-                return false
-            }
+            // 一期只有自带 Key 一条路径：没配 Key 就说清楚缺什么，不提试用/会员
             if showFeedback {
-                overlayWindow.showHint(ownKeyHint ?? "请先在「设置 → 模型」里填入 API key")
+                overlayWindow.showHint(ownKeyHint ?? "请先在「设置 → 模型」里填入 API Key")
                 debugLog("Cloud ASR unavailable: \(cloudTranscriber.missingConfigurationHint())")
             }
             return false
@@ -2833,12 +2725,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
                         self?.queueHint("窗口已切换 · 已复制，按 ⌘V 粘贴", urgent: true)
                     }
                 }
-                // quotaCharCount 只剩统计用途（每周字数限制已在 2026-09-14 取消）：仍按「未赞助 + 自带 Key」口径记，
-                // 保持 input_stats.json 老字段兼容。
-                let usedTrialProxy = self.processingMode.usesCloudTranscription
-                    && !self.cloudTranscriber.isConfigured()
-                    && TrialManager.shared.isInTrial
-                let countsTowardQuota = !LicenseManager.shared.isActivated && !usedTrialProxy
+                // quotaCharCount 只剩统计用途（每周字数限制已在 2026-09-14 取消）：
+                // 一期没有试用/会员通道，所有投递都按「自带 Key」口径计入，保持 input_stats.json 老字段兼容。
+                let countsTowardQuota = true
                 InputStats.shared.record(charCount: deliveredText.count,
                                          countsTowardFreeQuota: countsTowardQuota)
                 AutoLearnScheduler.shared.noteRecordDelivered()
@@ -2852,8 +2741,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
                 if let warning = self.pendingPolishWarning {
                     self.pendingPolishWarning = nil
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        let tip = warning.contains("额度") && !LicenseManager.shared.hasActiveMembership() ? " · 开通会员或填自己的 Key 不限量" : ""
-                        self.queueHint("已输出未润色文字（润色失败：\(warning)）\(tip)")
+                        self.queueHint("已输出未润色文字（润色失败：\(warning)）")
                     }
                 }
 
@@ -3129,17 +3017,15 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     }
 
     private func buildDone(into stack: NSStackView) {
-        // 试用期内无需配置 API（走内置试用通道），所以最后一步统一报「就绪」、不催填 key，
-        // 直接告诉用户按哪个热键开始。试用到期再到「设置 → 模型」填自己的 key（永久免费）。
+        // 一期没有试用通道：填了自己的 Key 才算就绪，没填就明确说「还差一步」并指到模型页。
         let hotkey = RecordingHotkeyShortcut.current.displayName
         stack.addArrangedSubview(makeBadge("✓", green: true))
         stack.setCustomSpacing(26, after: stack.arrangedSubviews.last!)
-        // 自编译的开源版没有试用通道：得先填 Key 才能用，别报「就绪」
-        let selfBuilt = !TrialManager.shared.isTrialAvailable
-        stack.addArrangedSubview(makeTitle(selfBuilt ? "还差一步" : "全部就绪"))
-        stack.addArrangedSubview(makeBody(selfBuilt
-            ? "这个版本不含试用通道。先到「设置 → 模型」填入自己的 API Key，然后按住 \(hotkey) 说话。"
-            : "按住 \(hotkey) 说话，松手就贴上整理好的文字。"))
+        let ready = CloudASRTranscriber().isConfigured()
+        stack.addArrangedSubview(makeTitle(ready ? "全部就绪" : "还差一步"))
+        stack.addArrangedSubview(makeBody(ready
+            ? "按住 \(hotkey) 说话，松手就贴上整理好的文字。"
+            : "还差一个 API Key。到「设置 → 模型」填好后，按住 \(hotkey) 说话即可。"))
         stack.setCustomSpacing(30, after: stack.arrangedSubviews.last!)
         stack.addArrangedSubview(makePrimaryButton("开始使用") { [weak self] in
             self?.finish()
