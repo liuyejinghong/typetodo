@@ -2450,24 +2450,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
         debugLog("MH: listening=\(manager.isListening) enabled=\(MouseHoldToTalkSettings.isEnabled)")
     }
 
-    /// 引导页 / 首页健康卡里的「打开辅助功能设置」。
+    /// 引导页 / 首页健康卡里的「打开系统权限设置」。
     ///
-    /// 只打开设置面板是不够的：macOS 的「辅助功能」列表里只会出现**主动请求过**的 App。
-    /// 登记动作就是 `AXIsProcessTrustedWithOptions(prompt: true)`，它同时会弹系统授权框。
-    /// 因此这里先发请求（没登记过的 App 弹窗并出现在列表里），
-    /// 已经请求过（系统不再弹窗）时再直接打开面板兜底。
+    /// 两件事都要做，而且**每次都要做**：
+    /// 1. `AXIsProcessTrustedWithOptions(prompt: true)` —— 这是唯一会让 macOS 把本 App
+    ///    登记进权限列表的动作。没它，列表里永远找不到我们，用户勾无可勾。
+    /// 2. 打开设置面板 —— 系统弹窗只在"从未回答过"时出现，之后静默返回 false，
+    ///    这时必须自己把用户送到面板里。
+    ///
+    /// 早先按"只请求一次"做了个 UserDefaults 开关，结果是：第一次请求后用户若没勾，
+    /// 之后再点就只跳面板、不再登记，等于把唯一入口关了。已改成无状态、幂等。
     func openAccessibilitySettings() {
-        let requestedBefore = UserDefaults.standard.bool(forKey: Self.didRequestAccessibilityKey)
-        if !requestedBefore {
-            UserDefaults.standard.set(true, forKey: Self.didRequestAccessibilityKey)
-            debugLog("Accessibility: requesting system prompt (registers app in the list)")
-            _ = textDelivery?.hasAccessibilityPermission(promptIfNeeded: true)
-            return
-        }
+        let trusted = textDelivery?.hasAccessibilityPermission(promptIfNeeded: true) ?? false
+        debugLog("Accessibility: prompt requested, trusted=\(trusted)")
+        guard !trusted else { return }
         textDelivery?.openAccessibilitySettings()
     }
-
-    private static let didRequestAccessibilityKey = "accessibility.requestedSystemPrompt"
 
     func openMicrophoneSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
@@ -2996,11 +2994,11 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     private func buildAccessibility(into stack: NSStackView) {
         stack.addArrangedSubview(makeBadge("🔑"))
         stack.setCustomSpacing(26, after: stack.arrangedSubviews.last!)
-        stack.addArrangedSubview(makeTitle("开启辅助功能"))
-        stack.addArrangedSubview(makeBody("用于监听快捷键、把文字贴到光标处。"))
+        stack.addArrangedSubview(makeTitle("开启系统权限"))
+        stack.addArrangedSubview(makeBody("用于监听快捷键、把文字贴到光标处。\n在「隐私与安全 → \(PrivacyPane.accessibilityTitle)」里找到 Typetodo 并打开它。"))
         stack.setCustomSpacing(30, after: stack.arrangedSubviews.last!)
 
-        stack.addArrangedSubview(makePrimaryButton("打开辅助功能设置") { [weak self] in
+        stack.addArrangedSubview(makePrimaryButton("打开权限设置") { [weak self] in
             self?.appDelegate?.openAccessibilitySettings()
         })
 
@@ -3008,6 +3006,16 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         stack.setCustomSpacing(14, after: stack.arrangedSubviews.last!)
         stack.addArrangedSubview(makeStatusPill(granted ? "✓ 已授权" : "等待授权…", done: granted))
         // 该步骤强制：未授权无法继续，没有跳过按钮。
+
+        if !granted {
+            // 已知故障态：开关是开的，但系统仍判定未授权。成因是 TCC 里那条记录绑的是
+            // 旧的代码签名（换签名/换安装路径后常见），开关只对旧记录生效。
+            // 唯一解是删掉这条记录让它重新登记，所以直接把做法写在这里。
+            stack.setCustomSpacing(10, after: stack.arrangedSubviews.last!)
+            let tip = makeBody("开关已经是打开的？那说明系统里的旧记录失效了：点列表下方的「−」把 Typetodo 删掉，再点上面的按钮重新添加一次。")
+            tip.maximumNumberOfLines = 0
+            stack.addArrangedSubview(tip)
+        }
     }
 
     private func buildMicrophone(into stack: NSStackView) {

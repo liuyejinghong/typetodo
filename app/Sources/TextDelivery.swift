@@ -327,3 +327,15 @@ class TextDelivery {
         }
     }
 }
+
+/// 系统「隐私与安全」面板的名称。macOS 27 起把原来的「辅助功能」并入了
+/// 「设备控制和数据访问」（`SecurityPrivacyExtension.applex` 里
+/// `ACCESSIBILITY = "Device Control and Data Access"`），授权语义没变，
+/// 深链 `?Privacy_Accessibility` 仍然落在同一个面板上，只是标题换了。
+/// 面向用户的文案必须跟着系统走，否则用户按我们的字面提示在设置里找不到入口。
+enum PrivacyPane {
+    static var accessibilityTitle: String {
+        if #available(macOS 27, *) { return "设备控制和数据访问" }
+        return "辅助功能"
+    }
+}
