@@ -48,6 +48,17 @@ final class WhatsNewGuideView: NSView, WKScriptMessageHandler, WKNavigationDeleg
         addSubview(web)
         webView = web
 
+        // 顶部拖拽带：见 GuideDragHandle 的说明
+        let dragHandle = GuideDragHandle()
+        dragHandle.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(dragHandle, positioned: .above, relativeTo: web)
+        NSLayoutConstraint.activate([
+            dragHandle.leadingAnchor.constraint(equalTo: leadingAnchor),
+            dragHandle.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -72),
+            dragHandle.topAnchor.constraint(equalTo: topAnchor),
+            dragHandle.heightAnchor.constraint(equalToConstant: 28),
+        ])
+
         // 逃生口：右上角低调的「跳过」；Esc 同样能关
         let skip = NSButton(title: "跳过", target: self, action: #selector(skipTapped))
         skip.isBordered = false
@@ -146,5 +157,18 @@ final class WhatsNewGuideView: NSView, WKScriptMessageHandler, WKNavigationDeleg
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         finish(reason: "web content process terminated")
+    }
+}
+
+
+/// 引导层铺满设置窗内容区，WKWebView 会把整窗的鼠标事件都吃掉，
+/// 连标题栏那条也没法拖——用户想把窗口挪开看底下就做不到。
+/// 盖一条透明带子在顶部，按下就交给窗口自己跑拖拽循环。
+/// 右侧留出 72pt 给「跳过」按钮，免得把它们也挡住。
+private final class GuideDragHandle: NSView {
+    override var mouseDownCanMoveWindow: Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.performDrag(with: event)
     }
 }
