@@ -1238,7 +1238,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         rebuildSidebar()
         selectPage(.home)
         lastEnvironmentSnapshot = currentEnvironmentSnapshot()   // 首页刚按当前状态建好，以此为基准
-        refreshTrialStatusIfNeeded()
         // 系统切换外观只刷新颜色，保留输入框、滚动位置和展开状态。
         (window.contentView as? AppearanceObservingView)?.onAppearanceChange = { [weak self] in
             self?.applyTheme()
@@ -1293,13 +1292,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             name: NSApplication.didBecomeActiveNotification,
             object: nil
         )
-        // 会员状态（开通 / 续费 / 到期 / 创世标识）变化：刷新侧栏与关于页
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(membershipDidChange),
-            name: LicenseManager.membershipDidChangeNotification,
-            object: nil
-        )
         // 「设置 → 外观」切换，或系统深浅切换（含「自动」模式天黑天亮）：重新套外观
         MainWindowAppearance.observeSystemChanges()
         NotificationCenter.default.addObserver(
@@ -1331,25 +1323,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         applyMainWindowAppearance()   // 兜底：万一漏了切换通知，用户回到窗口时补上
     }
 
-    @objc private func appDidBecomeActive() {
-        refreshTrialStatusIfNeeded()
-    }
-
-    @objc private func membershipDidChange() {
-        DispatchQueue.main.async { [weak self] in
-            self?.rebuildSidebar()
-            self?.invalidate(.about)
-        }
-    }
-
-    /// 试用中且未激活时向服务器刷新一次；成功后重绘侧栏让「今日用量 / 剩余天数」趋新。
-    private func refreshTrialStatusIfNeeded() {
-        guard TrialManager.shared.isInTrial, !LicenseManager.shared.isActivated else { return }
-        TrialManager.shared.refreshFromServer { [weak self] ok in
-            guard ok else { return }
-            self?.rebuildSidebar()   // completion 已在主线程回调
-        }
-    }
+    @objc private func appDidBecomeActive() {}
 
     @objc private func updateStateDidChange() {
         DispatchQueue.main.async { [weak self] in
@@ -1573,8 +1547,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         // 旧版右侧留 8（可用 94），第一行 92.9、第二行 93.9，全是零点几点的余量——只要字体度量差一丝，
         // 系统就压「创世用户」那个标签，它折成两行、胶囊变高往上顶，于是名字被盖、看起来像"变形"（Ray 截图）。
         // 现在：有新版本时用 8 点的小红点代替 NEW 徽章（第二行降到 67.8），名字和标签都禁止折行。
-        let isGenesis = LicenseManager.shared.isGenesis
-        let logo = makeWaveformMark(box: isGenesis ? 40 : 28, corner: isGenesis ? 11 : 8, boxColor: theme.accent, waveColor: theme.onAccent)
+        let logo = makeWaveformMark(box: 28, corner: 8, boxColor: theme.accent, waveColor: theme.onAccent)
 
         let title = NSTextField(labelWithString: "Typetodo")
         title.font = .systemFont(ofSize: 14, weight: .semibold)
@@ -1597,25 +1570,14 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         header.addSubview(title)
         header.addSubview(version)
 
-        var genesisTag: NSView?
-        if isGenesis {
-            let tag = makeTag("创世用户", bg: Self.softFill, fg: theme.text, size: 10)
-            tag.toolTip = "3.0 之前就支持 Typetodo 的用户，谢谢你一路同行"
-            header.addSubview(tag)
-            genesisTag = tag
-        }
-
         var trailingView: NSView = version
         if let updateInfo = settingsDelegate?.pendingUpdateInfo(), updateInfo.errorMessage == nil {
-            // 小红点代替 NEW 徽章：见上面的宽度账。非创世用户那一行（名字+版本号+NEW＝128）同样放不下，
-            // 所以两种排版都用红点；整块 header 仍可点，提示文案不变。
+            // 小红点代替 NEW 徽章：名字+版本号+NEW 放不下，用 8 点的小红点。整块 header 仍可点。
             let badge = makeNewDot()
             header.addSubview(badge)
-            // 创世用户排版里，NEW 放到第二行标签后面（第一行放不下）
-            let anchorView: NSView = genesisTag ?? version
             NSLayoutConstraint.activate([
-                badge.leadingAnchor.constraint(equalTo: anchorView.trailingAnchor, constant: 6),
-                badge.centerYAnchor.constraint(equalTo: (genesisTag ?? title).centerYAnchor),
+                badge.leadingAnchor.constraint(equalTo: version.trailingAnchor, constant: 6),
+                badge.centerYAnchor.constraint(equalTo: title.centerYAnchor),
             ])
             trailingView = badge
             header.toolTip = "查看新版本"
@@ -1626,32 +1588,16 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             header.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(showUpdateHistory)))
         }
 
-        if let tag = genesisTag {
-            NSLayoutConstraint.activate([
-                logo.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 10),
-                logo.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-                // 名字字形顶端贴 logo 上沿（14pt 字的大写高度起点在文字框下方约 4 点），标签底边贴 logo 下沿
-                title.leadingAnchor.constraint(equalTo: logo.trailingAnchor, constant: 10),
-                title.topAnchor.constraint(equalTo: logo.topAnchor, constant: -4),
-                version.leadingAnchor.constraint(equalTo: title.trailingAnchor, constant: 6),
-                version.firstBaselineAnchor.constraint(equalTo: title.firstBaselineAnchor),
-                tag.leadingAnchor.constraint(equalTo: title.leadingAnchor),
-                tag.bottomAnchor.constraint(equalTo: logo.bottomAnchor),
-                trailingView.trailingAnchor.constraint(lessThanOrEqualTo: header.trailingAnchor, constant: -4),
-                header.heightAnchor.constraint(equalToConstant: 58),
-            ])
-        } else {
-            NSLayoutConstraint.activate([
-                logo.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 10),
-                logo.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-                title.leadingAnchor.constraint(equalTo: logo.trailingAnchor, constant: 9),
-                title.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-                version.leadingAnchor.constraint(equalTo: title.trailingAnchor, constant: 7),
-                version.firstBaselineAnchor.constraint(equalTo: title.firstBaselineAnchor),
-                trailingView.trailingAnchor.constraint(lessThanOrEqualTo: header.trailingAnchor, constant: -4),
-                header.heightAnchor.constraint(equalToConstant: 42),
-            ])
-        }
+        NSLayoutConstraint.activate([
+            logo.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 10),
+            logo.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            title.leadingAnchor.constraint(equalTo: logo.trailingAnchor, constant: 9),
+            title.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            version.leadingAnchor.constraint(equalTo: title.trailingAnchor, constant: 7),
+            version.firstBaselineAnchor.constraint(equalTo: title.firstBaselineAnchor),
+            trailingView.trailingAnchor.constraint(lessThanOrEqualTo: header.trailingAnchor, constant: -4),
+            header.heightAnchor.constraint(equalToConstant: 42),
+        ])
         return header
     }
 
@@ -2496,8 +2442,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private func makeSoftTag(_ text: String) -> NSView { makeTag(text, bg: Self.softFill, fg: theme.text3) }
 
     /// 深标签（强调色底 + onAccent 文字），如「推荐」。
-    private func makeDarkTag(_ text: String) -> NSView { makeTag(text, bg: theme.accent, fg: theme.onAccent) }
-
     private func makeTag(_ text: String, bg: NSColor, fg: NSColor, size: CGFloat = 11) -> NSView {
         let v = NSView()
         v.translatesAutoresizingMaskIntoConstraints = false
@@ -2528,35 +2472,20 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         let asrOK = CloudASRTranscriber().isConfigured()
         let polishOK = isPolishConfigured()
         let polishOff = (config.string(forKey: "polish_provider") ?? "qwen") == "none"
-        // 按真实走的通道显示：会员优先时填了 Key 也显示「会员」；没填 Key 时会员 / 试用都算「可用」
-        func hostedRow(ownKey: Bool) -> (sub: String, tail: String)? {
-            switch HostedRoute.current(ownKeyConfigured: ownKey) {
-            case .member: return ("会员 · 免配置，用我们提供的", "会员")
-            case .trial: return ("试用中 · 用我们提供的", "试用中")
-            case .none: return nil
-            }
-        }
-        let asrHosted = hostedRow(ownKey: asrOK)
-        let polishHosted = hostedRow(ownKey: polishOK)
-
         var rows: [(String, String, Bool, String, Selector?)] = [
             ("麦克风", micStatus.sub, micStatus.ok, micStatus.tail,
              micStatus.ok ? nil : #selector(healthMicRowTapped)),
             ("辅助功能", accessOK ? "可自动粘贴" : "未开启只能复制到剪贴板，点击去系统设置开启",
              accessOK, accessOK ? "已允许" : "未允许",
              accessOK ? nil : #selector(healthAccessibilityRowTapped)),
-            asrHosted != nil
-                ? ("语音识别", asrHosted!.sub, true, asrHosted!.tail, nil)
-                : asrOK
-                    ? ("语音识别", "BigASR 可用", true, "已配置", nil)
-                    : ("语音识别", "请填写 ASR Key", false, "未配置", nil),
+            asrOK
+                ? ("语音识别", "BigASR 可用", true, "已配置", nil)
+                : ("语音识别", "请填写 ASR Key", false, "未配置", nil),
             polishOff
                 ? ("AI 润色", "已选「不优化」，直接输出识别原文", true, "已关闭", nil)
-                : polishHosted != nil
-                    ? ("AI 润色", polishHosted!.sub, true, polishHosted!.tail, nil)
-                    : polishOK
-                        ? ("AI 润色", "可整理文本", true, "已配置", nil)
-                        : ("AI 润色", "请填写润色 Key", false, "未配置", nil),
+                : polishOK
+                    ? ("AI 润色", "可整理文本", true, "已配置", nil)
+                    : ("AI 润色", "请填写润色 Key", false, "未配置", nil),
         ]
         // 设置写不进磁盘时明确亮出来（工单 #9：以前只记日志，用户只看到「每次打开都像第一次」）。
         // 已自动退到备用位置且写得进去的，不算问题，不显示。
@@ -2622,9 +2551,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     }
 
     private func healthAllOK() -> Bool {
-        let hosted = HostedRoute.current(ownKeyConfigured: false) != .none   // 会员/试用走托管通道，不算缺 Key
         return micStatusInfo().ok && AXIsProcessTrusted()
-            && (CloudASRTranscriber().isConfigured() || hosted) && (isPolishConfigured() || hosted)
+            && CloudASRTranscriber().isConfigured() && isPolishConfigured()
     }
 
     @objc private func toggleHealthExpanded() {
@@ -3217,18 +3145,11 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             field?.delegate = self
         }
 
-        // 首次/未配置时，顶部一句明确的「最后一步」引导（会员、试用中都不用填 Key，不催）
-        if !CloudASRTranscriber().isConfigured() && !LicenseManager.shared.hasActiveMembership() && !TrialManager.shared.isInTrial {
+        // 首次/未配置时，顶部一句明确的「最后一步」引导
+        if !CloudASRTranscriber().isConfigured() {
             let callout = makeFirstRunCallout()
             stack.addArrangedSubview(callout)
             stack.setCustomSpacing(14, after: callout)
-        }
-
-        // 会员期间走哪条通道：选择权交给用户（有人为了隐私就是要用自己的 Key）
-        if LicenseManager.shared.isMember, !LicenseManager.shared.isMemberExpired(), TrialManager.shared.isTrialAvailable {
-            let routeCard = makeMemberRouteCard()
-            stack.addArrangedSubview(routeCard)
-            stack.setCustomSpacing(14, after: routeCard)
         }
 
         // Tutorial banner
@@ -3272,49 +3193,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         card.widthAnchor.constraint(equalTo: col.widthAnchor).isActive = true
         filler.widthAnchor.constraint(equalTo: col.widthAnchor).isActive = true
         return col
-    }
-
-    /// 会员通道开关：开 = 识别/润色/问 AI 走会员服务，已填的 Key 留着不用；关 = 自己的 Key 优先，没填的项目才走会员。
-    private func makeMemberRouteCard() -> NSView {
-        let card = makeCard()
-        let on = HostedRoute.memberFirst
-        let title = label("优先走会员服务", size: 14, weight: .medium, color: theme.text)
-        let desc = label(on ? "识别、润色和问 AI 都用我们提供的服务，下面填的 Key 先留着不用。关掉则优先用你自己的 Key。"
-                            : "优先用你自己的 Key（内容直连服务商，不经过我们）；没填 Key 的项目才走会员服务。",
-                         size: 12, weight: .regular, color: theme.text3)
-        desc.maximumNumberOfLines = 0
-        let toggle = VPToggle(theme: theme, target: self, action: #selector(memberRouteChanged(_:)))
-        toggle.setOn(on, animated: false)
-        toggle.setAccessibilityLabel("优先走会员服务")
-
-        let textStack = NSStackView()
-        textStack.orientation = .vertical
-        textStack.alignment = .leading
-        textStack.spacing = 2
-        textStack.addArrangedSubview(title)
-        textStack.addArrangedSubview(desc)
-        textStack.setHuggingPriority(.defaultLow, for: .horizontal)
-
-        let spacer = NSView()
-        spacer.translatesAutoresizingMaskIntoConstraints = false
-        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-
-        let row = NSStackView()
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        row.distribution = .fill
-        row.spacing = 16
-        row.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
-        row.addArrangedSubview(textStack)
-        row.addArrangedSubview(spacer)
-        row.addArrangedSubview(toggle)
-        mount(row, in: card)
-        return card
-    }
-
-    @objc private func memberRouteChanged(_ sender: VPToggle) {
-        config.save(bool: sender.isOn, forKey: HostedRoute.memberFirstConfigKey)
-        invalidate(.model, .home)
     }
 
     private func makeFirstRunCallout() -> NSView {
@@ -5906,17 +5784,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         logoStack.setCustomSpacing(4, after: name)
         logoStack.setCustomSpacing(2, after: sub)
         logoStack.setCustomSpacing(2, after: based)
-
-        if LicenseManager.shared.isActivated {
-            let license = LicenseManager.shared
-            var status = "✓ 已激活"
-            if license.isMember {
-                status = license.isMemberExpired() ? "会员已到期" : "✓ 会员 · 有效期至 \(license.memberExpiresDay ?? "—")"
-            }
-            let actLbl = label(license.isGenesis ? "\(status) · 创世用户" : status, size: 12, weight: .regular, color: theme.text3)
-            logoStack.addArrangedSubview(actLbl)
-            logoStack.setCustomSpacing(12, after: sub)
-        }
 
         let hasPendingUpdate: Bool
         if let updateInfo = settingsDelegate?.pendingUpdateInfo(), updateInfo.errorMessage == nil {

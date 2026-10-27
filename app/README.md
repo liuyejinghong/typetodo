@@ -63,7 +63,7 @@ swift test --disable-sandbox -Xswiftc -Xfrontend -Xswiftc -disable-sandbox
 python3 tools/check_app_invariants.py app/Sources
 ```
 
-基线：**100 个本地 selector / 0 孤儿 / 7 个页面分支**。
+基线：**98 个本地 selector / 0 孤儿 / 7 个页面分支**。
 
 ## 目录
 
