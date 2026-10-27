@@ -2450,9 +2450,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
         debugLog("MH: listening=\(manager.isListening) enabled=\(MouseHoldToTalkSettings.isEnabled)")
     }
 
+    /// 引导页 / 首页健康卡里的「打开辅助功能设置」。
+    ///
+    /// 只打开设置面板是不够的：macOS 的「辅助功能」列表里只会出现**主动请求过**的 App。
+    /// 登记动作就是 `AXIsProcessTrustedWithOptions(prompt: true)`，它同时会弹系统授权框。
+    /// 因此这里先发请求（没登记过的 App 弹窗并出现在列表里），
+    /// 已经请求过（系统不再弹窗）时再直接打开面板兜底。
     func openAccessibilitySettings() {
+        let requestedBefore = UserDefaults.standard.bool(forKey: Self.didRequestAccessibilityKey)
+        if !requestedBefore {
+            UserDefaults.standard.set(true, forKey: Self.didRequestAccessibilityKey)
+            debugLog("Accessibility: requesting system prompt (registers app in the list)")
+            _ = textDelivery?.hasAccessibilityPermission(promptIfNeeded: true)
+            return
+        }
         textDelivery?.openAccessibilitySettings()
     }
+
+    private static let didRequestAccessibilityKey = "accessibility.requestedSystemPrompt"
 
     func openMicrophoneSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {

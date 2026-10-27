@@ -32,6 +32,27 @@ bash scripts/install_app.sh       # 安装到 /Applications
 
 也可以直接用 Xcode 打开 `Typetodo.xcodeproj`，scheme `Typetodo`。签名换成你自己的 Team 即可。
 
+### 本地开发签名（重要）
+
+用 ad-hoc 签名（`CODE_SIGN_IDENTITY="-"`）时，辅助功能/麦克风这类授权**每次重编都会丢**：
+TCC 把授权绑在签名的 designated requirement 上，ad-hoc 的 requirement 是 cdhash，随二进制变化。
+
+所以本地装到 `/Applications` 测试时用 Apple Development 证书重签：
+
+```bash
+../tools/xcodebuild.sh -project Typetodo.xcodeproj -scheme Typetodo \
+  -configuration Debug -derivedDataPath /tmp/TypetodoDerived \
+  CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual CODE_SIGNING_REQUIRED=YES \
+  OTHER_SWIFT_FLAGS='-Xfrontend -disable-sandbox' build
+
+bash scripts/sign-dev.sh /tmp/TypetodoDerived/Build/Products/Debug/Typetodo.app
+ditto /tmp/TypetodoDerived/Build/Products/Debug/Typetodo.app /Applications/Typetodo.app
+```
+
+`sign-dev.sh` 按由内到外的顺序签（Sparkle XPC → 辅助工具 → 框架 → Debug dylib → app），
+且**不加 `--options runtime`**：硬化运行时的库校验要求主二进制与 `Typetodo.debug.dylib`
+的 Team ID 一致，只签外层会导致启动即崩。
+
 **自己编译的版本只能用自带 Key**（服务端地址不在仓库里，见 `local.build.env.example`）。装好后到「设置 → 模型」填入自己的 API Key。
 
 ### 在沙箱/CI 里构建
