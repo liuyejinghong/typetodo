@@ -1582,6 +1582,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowDelegate, SPUU
         // 启动末尾主动调一次，注册 hotkey 并把状态栏置为 ready
         updateAppReadiness()
 
+        #if DEBUG
+        // UI 验收快照的触发轮询（仅 DEBUG；见 UIDebugSnapshot）
+        UIDebugSnapshot.startWatcher()
+        #endif
+
     }
 
     func applicationWillTerminate(_ notification: Notification) {

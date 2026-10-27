@@ -579,6 +579,19 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             }
         }
 
+        /// 快照文件名用（仅 DEBUG 编译进来）
+        var debugName: String {
+            switch self {
+            case .home: return "home"
+            case .history: return "history"
+            case .vocabulary: return "vocabulary"
+            case .model: return "model"
+            case .explore: return "explore"
+            case .settings: return "settings"
+            case .about: return "about"
+            }
+        }
+
         var symbolName: String {
             switch self {
             case .home: return "house"
@@ -1465,6 +1478,70 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         }
 
     }
+
+#if DEBUG
+    // MARK: - UI 验收快照（仅 DEBUG）
+
+    /// 把若干页面离屏渲染成 PNG，并 dump 每个文本元素的布局度量。
+    ///
+    /// 为什么不用 screencapture：那条路要屏幕录制权限，而且拍的是整块屏幕——
+    /// 会把用户当时的窗口一起拍进去。这里走 NSView.cacheDisplay，
+    /// 只画自己的内容，不弹窗、不抢焦点、不需要任何系统权限。
+    /// 度量里带 `needW`（不受约束时的自然宽度）和 `truncated`，
+    /// 用来发现「文案被压断」这类只有肉眼才能看见的问题。
+    func debugSnapshot(pages: [Page], to dir: URL) throws -> [[String: Any]] {
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        guard let cv = window?.contentView else { return [] }
+        cv.layoutSubtreeIfNeeded()
+
+        var report: [[String: Any]] = []
+        for page in pages {
+            selectPage(page)
+            cv.layoutSubtreeIfNeeded()
+            CATransaction.flush()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            cv.layoutSubtreeIfNeeded()
+
+            let bounds = cv.bounds
+            guard let rep = cv.bitmapImageRepForCachingDisplay(in: bounds) else { continue }
+            cv.cacheDisplay(in: bounds, to: rep)
+            let png = rep.representation(using: .png, properties: [:]) ?? Data()
+            let url = dir.appendingPathComponent("\(page.debugName).png")
+            try png.write(to: url)
+
+            report.append([
+                "page": page.debugName,
+                "image": url.path,
+                "w": Int(bounds.width.rounded()),
+                "h": Int(bounds.height.rounded()),
+                "texts": debugTextMetrics(in: cv),
+            ])
+        }
+        return report
+    }
+
+    private func debugTextMetrics(in root: NSView) -> [[String: Any]] {
+        var out: [[String: Any]] = []
+        func walk(_ v: NSView) {
+            if let tf = v as? NSTextField, !tf.stringValue.isEmpty, !v.isHiddenOrHasHiddenAncestor {
+                let f = v.convert(v.bounds, to: root)
+                let need = tf.intrinsicContentSize.width
+                out.append([
+                    "text": tf.stringValue,
+                    "x": Int(f.origin.x.rounded()),
+                    "top": Int((root.bounds.height - f.maxY).rounded()),
+                    "w": Int(f.width.rounded()),
+                    "h": Int(f.height.rounded()),
+                    "needW": Int(need.rounded()),
+                    "truncated": tf.maximumNumberOfLines == 1 && need > f.width + 0.5,
+                ])
+            }
+            for sub in v.subviews { walk(sub) }
+        }
+        walk(root)
+        return out
+    }
+#endif
 
     private func buildScroll(for page: Page) -> NSScrollView {
         let scroll = NSScrollView()

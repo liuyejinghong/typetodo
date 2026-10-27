@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C831F89E5E7B8D88AEA6F902 /* UIDebugSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33917EEE108FB825164928FE /* UIDebugSnapshot.swift */; };
 		86505FD2E2708C717C8143F0 /* VPToggle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8590D927783B071AC7563F5F /* VPToggle.swift */; };
 		898CCE5BF94745F8202523EE /* VPDropdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9D18D4B532C793FED813A7 /* VPDropdown.swift */; };
 		2A0E626576E889E910697451 /* SidebarRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8AA68669B6B55B433B9AF91 /* SidebarRow.swift */; };
@@ -40,6 +41,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		33917EEE108FB825164928FE /* UIDebugSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIDebugSnapshot.swift; sourceTree = "<group>"; };
 		8590D927783B071AC7563F5F /* VPToggle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VPToggle.swift; sourceTree = "<group>"; };
 		5B9D18D4B532C793FED813A7 /* VPDropdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VPDropdown.swift; sourceTree = "<group>"; };
 		C8AA68669B6B55B433B9AF91 /* SidebarRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarRow.swift; sourceTree = "<group>"; };
@@ -131,6 +133,7 @@
 		AF177EAF6FE4CE64620733E6 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				33917EEE108FB825164928FE /* UIDebugSnapshot.swift */,
 				C0E2252AFA1180F1B1FAB825 /* UI */,
 				092D93934C4E338C9A3010FD /* main.swift */,
 				94DBE5DD4FC3B467E0FBD0F5 /* AppDelegate.swift */,
@@ -256,6 +259,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C831F89E5E7B8D88AEA6F902 /* UIDebugSnapshot.swift in Sources */,
 				86505FD2E2708C717C8143F0 /* VPToggle.swift in Sources */,
 				898CCE5BF94745F8202523EE /* VPDropdown.swift in Sources */,
 				2A0E626576E889E910697451 /* SidebarRow.swift in Sources */,
