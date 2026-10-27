@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		86505FD2E2708C717C8143F0 /* VPToggle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8590D927783B071AC7563F5F /* VPToggle.swift */; };
+		898CCE5BF94745F8202523EE /* VPDropdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9D18D4B532C793FED813A7 /* VPDropdown.swift */; };
+		2A0E626576E889E910697451 /* SidebarRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8AA68669B6B55B433B9AF91 /* SidebarRow.swift */; };
+		6EC88B1FB39DE7FE12F1CCAF /* VPSegmentedControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3FC92015AB9492AE8986A53 /* VPSegmentedControl.swift */; };
+		F81A19182C40B8FB1E994A6A /* VPButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A6533499EBB0ADB7E7E8051 /* VPButton.swift */; };
 		AF2026091000000000000001 /* AppAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF2026091000000000000002 /* AppAppearance.swift */; };
 		0693E913A8E894340C94D06C /* OverlayWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DD16C68DC13BE74C432E5BC /* OverlayWindow.swift */; };
 		35BD140E249225353E2DD47E /* TextDelivery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 502CD7DBBAD698B6BCA49515 /* TextDelivery.swift */; };
@@ -35,6 +40,11 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		8590D927783B071AC7563F5F /* VPToggle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VPToggle.swift; sourceTree = "<group>"; };
+		5B9D18D4B532C793FED813A7 /* VPDropdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VPDropdown.swift; sourceTree = "<group>"; };
+		C8AA68669B6B55B433B9AF91 /* SidebarRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarRow.swift; sourceTree = "<group>"; };
+		B3FC92015AB9492AE8986A53 /* VPSegmentedControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VPSegmentedControl.swift; sourceTree = "<group>"; };
+		7A6533499EBB0ADB7E7E8051 /* VPButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VPButton.swift; sourceTree = "<group>"; };
 		AF2026091000000000000002 /* AppAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAppearance.swift; sourceTree = "<group>"; };
 		092D93934C4E338C9A3010FD /* main.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		3AF574D65ABA315E5CB849D5 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
@@ -121,6 +131,7 @@
 		AF177EAF6FE4CE64620733E6 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				C0E2252AFA1180F1B1FAB825 /* UI */,
 				092D93934C4E338C9A3010FD /* main.swift */,
 				94DBE5DD4FC3B467E0FBD0F5 /* AppDelegate.swift */,
 				AE7E5072C704593A814A88FB /* AudioRecorder.swift */,
@@ -143,6 +154,26 @@
 				AA22BB33CC44DD55EE660002 /* statusbar-icon@2x.png */,
 			);
 			path = Sources;
+			sourceTree = "<group>";
+		};
+		C0E2252AFA1180F1B1FAB825 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				1F038F02E6D3FEE5CAC7F64A /* Components */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		1F038F02E6D3FEE5CAC7F64A /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				8590D927783B071AC7563F5F /* VPToggle.swift */,
+				5B9D18D4B532C793FED813A7 /* VPDropdown.swift */,
+				C8AA68669B6B55B433B9AF91 /* SidebarRow.swift */,
+				B3FC92015AB9492AE8986A53 /* VPSegmentedControl.swift */,
+				7A6533499EBB0ADB7E7E8051 /* VPButton.swift */,
+			);
+			path = Components;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -225,6 +256,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				86505FD2E2708C717C8143F0 /* VPToggle.swift in Sources */,
+				898CCE5BF94745F8202523EE /* VPDropdown.swift in Sources */,
+				2A0E626576E889E910697451 /* SidebarRow.swift in Sources */,
+				6EC88B1FB39DE7FE12F1CCAF /* VPSegmentedControl.swift in Sources */,
+				F81A19182C40B8FB1E994A6A /* VPButton.swift in Sources */,
 				72623A4DCA036BC4FF8F55B9 /* main.swift in Sources */,
 				529BFDD97BE1DD8CFF292F1F /* AppDelegate.swift in Sources */,
 				72D5554CA515907A9916E5D8 /* AudioRecorder.swift in Sources */,
